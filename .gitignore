@@ -1,0 +1,10 @@
+/vendor/
+.env
+.phpunit.result.cache
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+/storage/*.key
+/storage/app/*
+/storage/framework/*
+/storage/logs/*
+/database/*.sqlite

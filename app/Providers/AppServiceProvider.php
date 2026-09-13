@@ -20,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        \Illuminate\Http\Resources\Json\JsonResource::withoutWrapping();
         Gate::policy(Lead::class, LeadPolicy::class);
         Gate::policy(Client::class, ClientPolicy::class);
     }

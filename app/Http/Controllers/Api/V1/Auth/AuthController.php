@@ -32,6 +32,7 @@ class AuthController extends Controller
     public function logout(Request $request): \Illuminate\Http\JsonResponse
     {
         Auth::guard('web')->logout();
+        Auth::forgetGuards();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

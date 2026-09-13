@@ -6,7 +6,6 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Next.js frontend origin are treated as "stateful" (session/cookie based)
         // rather than needing a bearer token.
         $middleware->statefulApi();
+        $middleware->appendToGroup('api', [
+            \Illuminate\Session\Middleware\StartSession::class,
+        ]);
 
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
@@ -32,7 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         // Consistent JSON error shape for the API (spec section 41), and never
         // leak stack traces to the frontend outside local/debug environments.
-        $exceptions->shouldRenderJsonWhen(function (Request $request, Throwable $e) {
+        $exceptions->shouldRenderJsonWhen(function (Request $request, \Throwable $e) {
             return $request->is('api/*') || $request->expectsJson();
         });
 
