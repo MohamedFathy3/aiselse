@@ -25,6 +25,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/google/gmail/send', [GoogleMailboxController::class, 'send']);
         Route::post('/ai/chat', [AiResearchController::class, 'chat']);
         Route::post('/ai/lead-search', [AiResearchController::class, 'search']);
+        Route::post('/ai/email-coach', [AiResearchController::class, 'emailCoach']);
         Route::get('/dashboard', [CrmController::class, 'dashboard']);
         Route::get('/leads', [CrmController::class, 'leads']);
         Route::post('/leads', [CrmController::class, 'storeLead']);

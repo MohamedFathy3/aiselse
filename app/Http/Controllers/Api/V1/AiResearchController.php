@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
+use App\Models\Lead;
+use App\Models\LeadSearch;
+use App\Models\LeadSearchResult;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -10,35 +14,98 @@ final class AiResearchController extends Controller
 {
     public function search(Request $request)
     {
-        $data = $request->validate(['query' => ['required', 'string', 'min:3', 'max:500'], 'filters' => ['nullable', 'array']]);
-        $search = \App\Models\LeadSearch::create(['user_id' => $request->user()->id, 'query' => $data['query'], 'filters' => $data['filters'] ?? [], 'status' => 'processing', 'current_step' => 'searching', 'started_at' => now()]);
+        $data = $request->validate(['query' => ['required', 'string', 'min:3', 'max:1000'], 'filters' => ['nullable', 'array']]);
+        $search = LeadSearch::create(['user_id' => $request->user()->id, 'query' => trim($data['query']), 'filters' => $data['filters'] ?? [], 'status' => 'processing', 'current_step' => 'searching', 'started_at' => now()]);
         try {
-            $items = Http::get('https://www.googleapis.com/customsearch/v1', [
-                'key' => config('services.search.key'), 'cx' => config('services.search.engine_id'), 'q' => $data['query'], 'num' => 10,
-            ])->throw()->json('items', []);
-            $results = collect($items)->map(fn ($item) => [
-                'lead_search_id' => $search->id, 'company_name' => $item['title'] ?? 'Unknown company', 'website' => $item['link'] ?? null,
-                'description' => $item['snippet'] ?? null, 'source_url' => $item['link'] ?? null, 'source_title' => $item['title'] ?? null,
-                'source_snippet' => $item['snippet'] ?? null, 'confidence_score' => 60, 'lead_score' => 50, 'review_status' => 'pending',
-            ])->values();
-            foreach ($results as $result) { \App\Models\LeadSearchResult::create($result); }
-            $search->update(['status' => 'completed', 'current_step' => 'completed', 'results_count' => $results->count(), 'completed_at' => now()]);
+            $result = $this->gemini($this->researchPrompt($data['query']), true);
+            $text = $result['text'];
+            $citations = $result['citations'];
+            $created = collect($citations)->take(10)->map(fn ($citation) => LeadSearchResult::create([
+                'lead_search_id' => $search->id,
+                'company_name' => $citation['title'] ?: 'Web result',
+                'website' => $citation['url'],
+                'description' => $text,
+                'source_url' => $citation['url'],
+                'source_title' => $citation['title'],
+                'source_snippet' => $text,
+                'confidence_score' => 75,
+                'lead_score' => 60,
+                'review_status' => 'pending',
+            ]));
+            $search->update(['status' => 'completed', 'current_step' => 'completed', 'results_count' => $created->count(), 'completed_at' => now(), 'error_message' => null]);
+            return response()->json(['search' => $search->fresh(), 'answer' => $text, 'results' => $created->values(), 'sources' => $citations], 201);
         } catch (\Throwable $e) {
             report($e);
-            $search->update(['status' => 'failed', 'current_step' => 'failed', 'error_message' => app()->isProduction() ? 'Search provider failed.' : $e->getMessage()]);
+            $message = $this->providerMessage($e);
+            $search->update(['status' => 'failed', 'current_step' => 'failed', 'error_message' => $message]);
+            return response()->json(['search' => $search->fresh(), 'results' => [], 'message' => $message], 502);
         }
-        return response()->json(['search' => $search->fresh(), 'results' => $search->results()->latest()->get()], $search->status === 'failed' ? 502 : 201);
     }
 
     public function chat(Request $request)
     {
-        $data = $request->validate(['message' => ['required', 'string', 'min:2', 'max:2000']]);
-        $context = [
-            'leads' => \App\Models\Lead::where('assigned_to', $request->user()->id)->latest()->limit(20)->get(['company_name', 'status', 'city', 'industry']),
-            'clients' => \App\Models\Client::where('user_id', $request->user()->id)->latest()->limit(20)->get(['company_name', 'country', 'city']),
-        ];
-        if (!config('services.ai.key')) return response()->json(['message' => 'AI is not configured. Add AI_API_KEY on the server.', 'context' => $context], 503);
-        $response = Http::withHeaders(['x-goog-api-key' => config('services.ai.key'), 'Content-Type' => 'application/json'])->post('https://generativelanguage.googleapis.com/v1beta/models/' . config('services.ai.model', 'gemini-1.5-flash') . ':generateContent', ['contents' => [['parts' => [['text' => 'You are a sales CRM assistant. Answer using only this CRM context and say when data is missing. Context: ' . json_encode($context) . "\nUser: " . $data['message']]]]]]);
-        return response()->json(['answer' => $response->throw()->json('candidates.0.content.parts.0.text')]);
+        $data = $request->validate(['message' => ['required', 'string', 'min:2', 'max:4000']]);
+        $context = $this->crmContext($request);
+        try {
+            $result = $this->gemini('You are a helpful sales CRM assistant. Answer in Arabic when the user writes Arabic. Use the private CRM context below, but if the user asks about companies, people, markets or facts outside the CRM, use Google Search and cite sources. Be practical and explain your reasoning. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), true);
+            return response()->json(['answer' => $result['text'], 'sources' => $result['citations']]);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json(['message' => $this->providerMessage($e)], 502);
+        }
+    }
+
+    public function emailCoach(Request $request)
+    {
+        $data = $request->validate(['email' => ['required', 'string', 'min:10', 'max:20000'], 'goal' => ['nullable', 'string', 'max:500'], 'tone' => ['nullable', 'string', 'in:professional,friendly,concise,persuasive']]);
+        try {
+            $result = $this->gemini('You are an expert B2B sales email coach. Analyze the email below and return Arabic headings: ملخص, نقاط القوة, نقاط الضعف, المخاطر أو الاعتراضات, الرد المقترح in the same language as the email, and next steps. Make the reply specific, respectful, and ready to send. Never invent facts. Goal: ' . ($data['goal'] ?? 'advance the conversation') . '. Tone: ' . ($data['tone'] ?? 'professional') . "\nEMAIL:\n" . $data['email'], false);
+            return response()->json(['analysis' => $result['text'], 'sources' => []]);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json(['message' => $this->providerMessage($e)], 502);
+        }
+    }
+
+    private function gemini(string $prompt, bool $search): array
+    {
+        $key = config('services.ai.key');
+        abort_unless($key, 503, 'AI is not configured. Add AI_API_KEY on the server.');
+        $model = config('services.ai.model', 'gemini-2.5-flash');
+        $payload = ['model' => $model, 'input' => $prompt];
+        if ($search) $payload['tools'] = [['type' => 'google_search']];
+        $response = Http::timeout(60)->withHeaders(['x-goog-api-key' => $key, 'Content-Type' => 'application/json'])->post('https://generativelanguage.googleapis.com/v1beta/interactions', $payload)->throw()->json();
+        $text = $response['output_text'] ?? '';
+        $citations = [];
+        foreach (($response['steps'] ?? []) as $step) {
+            if (($step['type'] ?? '') !== 'model_output') continue;
+            foreach (($step['content'] ?? []) as $content) {
+                if (($content['type'] ?? '') === 'text') {
+                    $text = $content['text'] ?? $text;
+                    foreach (($content['annotations'] ?? []) as $annotation) {
+                        if (($annotation['type'] ?? '') === 'url_citation' && !empty($annotation['url'])) $citations[] = ['url' => $annotation['url'], 'title' => $annotation['title'] ?? $annotation['url']];
+                    }
+                }
+            }
+        }
+        return ['text' => $text ?: 'لم يرجع مزود الذكاء الاصطناعي نصًا.', 'citations' => collect($citations)->unique('url')->values()->all()];
+    }
+
+    private function crmContext(Request $request): array
+    {
+        return ['leads' => Lead::where('assigned_to', $request->user()->id)->latest()->limit(30)->get(['company_name', 'status', 'city', 'industry', 'email']), 'clients' => Client::where('user_id', $request->user()->id)->latest()->limit(30)->get(['company_name', 'country', 'city', 'industry'])];
+    }
+
+    private function researchPrompt(string $query): string
+    {
+        return 'Search the public web for real companies matching this request. Answer in Arabic if the request is Arabic. Return a useful list with company name, country/city, software or business focus, why it may need freight forwarding, and a source URL for every company. Clearly separate verified facts from inference. Request: ' . $query;
+    }
+
+    private function providerMessage(\Throwable $e): string
+    {
+        $message = $e->getMessage();
+        if (str_contains($message, 'not found') || str_contains($message, '404')) return 'موديل Gemini الموجود في .env غير مدعوم. استخدم AI_MODEL=gemini-2.5-flash ثم نفّذ php artisan optimize:clear وphp artisan config:cache.';
+        if (str_contains($message, 'API key') || str_contains($message, '401') || str_contains($message, '403')) return 'مفتاح AI_API_KEY غير صحيح أو لا يملك صلاحية Gemini API.';
+        return app()->isProduction() ? 'تعذر الاتصال بخدمة الذكاء الاصطناعي. راجع إعدادات AI_API_KEY وAI_MODEL.' : $message;
     }
 }
