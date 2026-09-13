@@ -72,23 +72,19 @@ final class AiResearchController extends Controller
         $key = config('services.ai.key');
         abort_unless($key, 503, 'AI is not configured. Add AI_API_KEY on the server.');
         $model = config('services.ai.model', 'gemini-2.5-flash');
-        $payload = ['model' => $model, 'input' => $prompt];
-        if ($search) $payload['tools'] = [['type' => 'google_search']];
-        $response = Http::timeout(60)->withHeaders(['x-goog-api-key' => $key, 'Content-Type' => 'application/json'])->post('https://generativelanguage.googleapis.com/v1beta/interactions', $payload)->throw()->json();
-        $text = $response['output_text'] ?? '';
-        $citations = [];
-        foreach (($response['steps'] ?? []) as $step) {
-            if (($step['type'] ?? '') !== 'model_output') continue;
-            foreach (($step['content'] ?? []) as $content) {
-                if (($content['type'] ?? '') === 'text') {
-                    $text = $content['text'] ?? $text;
-                    foreach (($content['annotations'] ?? []) as $annotation) {
-                        if (($annotation['type'] ?? '') === 'url_citation' && !empty($annotation['url'])) $citations[] = ['url' => $annotation['url'], 'title' => $annotation['title'] ?? $annotation['url']];
-                    }
-                }
-            }
+        if (in_array($model, ['gemini-1.5-pro', 'gemini-1.5-flash'], true)) {
+            $model = 'gemini-2.5-flash';
         }
-        return ['text' => $text ?: 'لم يرجع مزود الذكاء الاصطناعي نصًا.', 'citations' => collect($citations)->unique('url')->values()->all()];
+        $payload = ['contents' => [['parts' => [['text' => $prompt]]]]];
+        if ($search) $payload['tools'] = [['google_search' => new \stdClass()]];
+        $response = Http::timeout(25)->connectTimeout(8)->withHeaders(['x-goog-api-key' => $key, 'Content-Type' => 'application/json'])->post('https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent', $payload)->throw()->json();
+        $candidate = $response['candidates'][0] ?? [];
+        $text = collect($candidate['content']['parts'] ?? [])->pluck('text')->filter()->implode("\\n");
+        $citations = collect($candidate['groundingMetadata']['groundingChunks'] ?? [])->map(function ($chunk) {
+            $web = $chunk['web'] ?? [];
+            return ['url' => $web['uri'] ?? null, 'title' => $web['title'] ?? ($web['uri'] ?? '')];
+        })->filter(fn ($item) => filled($item['url']))->unique('url')->values()->all();
+        return ['text' => $text ?: 'لم يرجع مزود الذكاء الاصطناعي نصًا.', 'citations' => $citations];
     }
 
     private function crmContext(Request $request): array
