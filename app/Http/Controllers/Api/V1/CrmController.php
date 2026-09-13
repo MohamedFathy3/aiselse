@@ -102,7 +102,7 @@ class CrmController extends Controller
 
     public function clients(Request $request)
     {
-        $query = Client::query()->withCount('contacts')->latest();
+        $query = Client::query()->latest();
         if ($request->user()->isSales()) $query->where('user_id', $request->user()->id);
         return $query->when($request->filled('search'), fn ($q) => $q->where('company_name', 'like', '%' . $request->string('search') . '%'))->paginate(min($request->integer('per_page', 20), 100));
     }
