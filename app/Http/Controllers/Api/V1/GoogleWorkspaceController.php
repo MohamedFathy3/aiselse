@@ -145,6 +145,6 @@ final class GoogleWorkspaceController extends Controller
             'post' => Http::withToken($token)->post($url, $query),
             default => Http::withToken($token)->get($url, $query),
         };
-        return $response->throw()->json();
+        return $response->throw()->json() ?? [];
     }
 }
