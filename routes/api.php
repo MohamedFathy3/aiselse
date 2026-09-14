@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/google/gmail/delete', [GoogleWorkspaceController::class, 'deleteMessages']);
         Route::post('/google/gmail/permanent-delete', [GoogleWorkspaceController::class, 'permanentlyDeleteMessages']);
         Route::get('/google/calendar', [GoogleWorkspaceController::class, 'calendar']);
+        Route::post('/google/calendar', [GoogleWorkspaceController::class, 'createCalendarEvent']);
         Route::post('/google/gmail/send', [GoogleMailboxController::class, 'send']);
         Route::post('/ai/chat', [AiResearchController::class, 'chat']);
         Route::post('/ai/lead-search', [AiResearchController::class, 'search']);

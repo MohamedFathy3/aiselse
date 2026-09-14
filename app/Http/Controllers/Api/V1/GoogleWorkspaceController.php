@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\CalendarEvent;
+use App\Models\Client;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -90,6 +93,49 @@ final class GoogleWorkspaceController extends Controller
             'orderBy' => 'startTime',
             'timeMin' => now()->toRfc3339String(),
         ]));
+    }
+
+    public function createCalendarEvent(Request $request)
+    {
+        $data = $request->validate([
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'starts_at' => ['required', 'date'],
+            'ends_at' => ['required', 'date', 'after:starts_at'],
+            'attendees' => ['nullable', 'array', 'max:20'],
+            'attendees.*' => ['email'],
+        ]);
+
+        $user = $request->user();
+        if ($user->isSales() && !empty($data['client_id'])) {
+            abort_unless(Client::where('id', $data['client_id'])->where('user_id', $user->id)->exists(), 403, 'You cannot schedule an event for this client.');
+        }
+
+        $start = Carbon::parse($data['starts_at']);
+        $end = Carbon::parse($data['ends_at']);
+        $event = $this->googleRequest($user, 'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all', [
+            'summary' => $data['title'],
+            'description' => $data['description'] ?? '',
+            'start' => ['dateTime' => $start->toRfc3339String(), 'timeZone' => config('app.timezone')],
+            'end' => ['dateTime' => $end->toRfc3339String(), 'timeZone' => config('app.timezone')],
+            'attendees' => collect($data['attendees'] ?? [])->map(fn ($email) => ['email' => $email])->values()->all(),
+        ], 'post');
+
+        $local = CalendarEvent::create([
+            'user_id' => $user->id,
+            'subject_type' => !empty($data['client_id']) ? 'client' : null,
+            'subject_id' => $data['client_id'] ?? null,
+            'google_event_id' => $event['id'],
+            'title' => $data['title'],
+            'description' => $data['description'] ?? null,
+            'starts_at' => $start,
+            'ends_at' => $end,
+            'attendees' => $data['attendees'] ?? [],
+            'status' => 'confirmed',
+        ]);
+
+        return response()->json(['event' => $event, 'local_event' => $local], 201);
     }
 
     private function normalizeMessage(array $message): array
