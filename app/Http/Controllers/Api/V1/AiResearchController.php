@@ -36,9 +36,9 @@ final class AiResearchController extends Controller
             return response()->json(['search' => $search->fresh(), 'answer' => $text, 'results' => $created->values(), 'sources' => $citations], 201);
         } catch (\Throwable $e) {
             report($e);
-            $message = $this->providerMessage($e);
-            $search->update(['status' => 'failed', 'current_step' => 'failed', 'error_message' => $message]);
-            return response()->json(['search' => $search->fresh(), 'results' => [], 'message' => $message], 502);
+            $failure = $this->providerFailure($e);
+            $search->update(['status' => 'failed', 'current_step' => 'failed', 'error_message' => $failure['message']]);
+            return response()->json(['search' => $search->fresh(), 'results' => [], 'error_code' => $failure['code'], 'message' => $failure['message'], 'provider_status' => $failure['status']], $failure['http_status']);
         }
     }
 
@@ -51,7 +51,8 @@ final class AiResearchController extends Controller
             return response()->json(['answer' => $result['text'], 'sources' => $result['citations']]);
         } catch (\Throwable $e) {
             report($e);
-            return response()->json(['message' => $this->providerMessage($e)], 502);
+            $failure = $this->providerFailure($e);
+            return response()->json(['error_code' => $failure['code'], 'message' => $failure['message'], 'provider_status' => $failure['status']], $failure['http_status']);
         }
     }
 
@@ -63,7 +64,8 @@ final class AiResearchController extends Controller
             return response()->json(['analysis' => $result['text'], 'sources' => []]);
         } catch (\Throwable $e) {
             report($e);
-            return response()->json(['message' => $this->providerMessage($e)], 502);
+            $failure = $this->providerFailure($e);
+            return response()->json(['error_code' => $failure['code'], 'message' => $failure['message'], 'provider_status' => $failure['status']], $failure['http_status']);
         }
     }
 
@@ -97,11 +99,14 @@ final class AiResearchController extends Controller
         return 'Search the public web for real companies matching this request. Answer in Arabic if the request is Arabic. Return a useful list with company name, country/city, software or business focus, why it may need freight forwarding, and a source URL for every company. Clearly separate verified facts from inference. Request: ' . $query;
     }
 
-    private function providerMessage(\Throwable $e): string
+    private function providerFailure(\Throwable $e): array
     {
         $message = $e->getMessage();
-        if (str_contains($message, 'not found') || str_contains($message, '404')) return 'موديل Gemini الموجود في .env غير متاح لهذا الحساب. استخدم AI_MODEL=gemini-3.6-flash ثم نفّذ php artisan optimize:clear وphp artisan config:cache.';
-        if (str_contains($message, 'API key') || str_contains($message, '401') || str_contains($message, '403')) return 'مفتاح AI_API_KEY غير صحيح أو لا يملك صلاحية Gemini API.';
-        return app()->isProduction() ? 'تعذر الاتصال بخدمة الذكاء الاصطناعي. راجع إعدادات AI_API_KEY وAI_MODEL.' : $message;
+        $status = $e instanceof \Illuminate\Http\Client\RequestException ? optional($e->response)->status() : null;
+        if ($status === 429 || str_contains($message, 'quota')) return ['code' => 'AI_QUOTA_EXCEEDED', 'message' => 'Gemini رفض الطلب لأن الحصة أو معدل الاستخدام انتهى. افحص Google AI Studio/Cloud Quotas.', 'status' => $status, 'http_status' => 429];
+        if ($status === 404 || str_contains($message, 'not found') || str_contains($message, '404')) return ['code' => 'AI_MODEL_NOT_AVAILABLE', 'message' => 'موديل Gemini غير متاح لهذا الحساب أو لا يدعم هذا endpoint. الموديل الحالي: ' . config('services.ai.model'), 'status' => $status, 'http_status' => 502];
+        if ($status === 401 || $status === 403 || str_contains($message, 'API key')) return ['code' => 'AI_AUTH_FAILED', 'message' => 'مفتاح Gemini غير صحيح أو لا يملك صلاحية استخدام API.', 'status' => $status, 'http_status' => 502];
+        if ($e instanceof \GuzzleHttp\Exception\ConnectException || str_contains($message, 'cURL error 28') || str_contains($message, 'timed out')) return ['code' => 'AI_UPSTREAM_TIMEOUT', 'message' => 'السيرفر لم يستطع الوصول إلى Gemini قبل انتهاء المهلة. افحص اتصال الخادم بالإنترنت وDNS وFirewall.', 'status' => null, 'http_status' => 504];
+        return ['code' => 'AI_PROVIDER_ERROR', 'message' => app()->isProduction() ? 'حدث خطأ غير متوقع أثناء الاتصال بخدمة Gemini. راجع laravel.log باستخدام error_code: AI_PROVIDER_ERROR.' : $message, 'status' => $status, 'http_status' => 502];
     }
 }
