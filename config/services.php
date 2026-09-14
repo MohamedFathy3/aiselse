@@ -15,6 +15,6 @@ return [
     'ai' => [
         'provider' => env('AI_PROVIDER', 'gemini'),
         'key' => env('AI_API_KEY'),
-        'model' => env('AI_MODEL', 'gemini-2.5-flash'),
+        'model' => env('AI_MODEL', 'gemini-3.6-flash'),
     ],
 ];

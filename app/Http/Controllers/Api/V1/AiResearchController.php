@@ -71,9 +71,9 @@ final class AiResearchController extends Controller
     {
         $key = config('services.ai.key');
         abort_unless($key, 503, 'AI is not configured. Add AI_API_KEY on the server.');
-        $model = config('services.ai.model', 'gemini-2.5-flash');
-        if (in_array($model, ['gemini-1.5-pro', 'gemini-1.5-flash'], true)) {
-            $model = 'gemini-2.5-flash';
+        $model = config('services.ai.model', 'gemini-3.6-flash');
+        if (in_array($model, ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.5-flash'], true)) {
+            $model = 'gemini-3.6-flash';
         }
         $payload = ['contents' => [['parts' => [['text' => $prompt]]]]];
         if ($search) $payload['tools'] = [['google_search' => new \stdClass()]];
@@ -100,7 +100,7 @@ final class AiResearchController extends Controller
     private function providerMessage(\Throwable $e): string
     {
         $message = $e->getMessage();
-        if (str_contains($message, 'not found') || str_contains($message, '404')) return 'موديل Gemini الموجود في .env غير مدعوم. استخدم AI_MODEL=gemini-2.5-flash ثم نفّذ php artisan optimize:clear وphp artisan config:cache.';
+        if (str_contains($message, 'not found') || str_contains($message, '404')) return 'موديل Gemini الموجود في .env غير متاح لهذا الحساب. استخدم AI_MODEL=gemini-3.6-flash ثم نفّذ php artisan optimize:clear وphp artisan config:cache.';
         if (str_contains($message, 'API key') || str_contains($message, '401') || str_contains($message, '403')) return 'مفتاح AI_API_KEY غير صحيح أو لا يملك صلاحية Gemini API.';
         return app()->isProduction() ? 'تعذر الاتصال بخدمة الذكاء الاصطناعي. راجع إعدادات AI_API_KEY وAI_MODEL.' : $message;
     }
