@@ -58,6 +58,16 @@ final class GoogleWorkspaceController extends Controller
         return response()->json($this->normalizeMessage($detail));
     }
 
+    public function deleteMessages(Request $request)
+    {
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1', 'max:100'], 'ids.*' => ['required', 'string']]);
+        $user = $request->user();
+        foreach ($data['ids'] as $id) {
+            $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . rawurlencode($id), [], 'delete');
+        }
+        return response()->json(['deleted' => count($data['ids'])]);
+    }
+
     public function calendar(Request $request)
     {
         return response()->json($this->googleRequest($request->user(), 'https://www.googleapis.com/calendar/v3/calendars/primary/events', [
@@ -99,7 +109,7 @@ final class GoogleWorkspaceController extends Controller
         return '';
     }
 
-    private function googleRequest($user, string $url, array $query = []): array
+    private function googleRequest($user, string $url, array $query = [], string $method = 'get'): array
     {
         abort_unless($user->hasConnectedGoogle(), 409, 'Connect your own Gmail account first.');
         $token = decrypt($user->google_access_token);
@@ -116,6 +126,9 @@ final class GoogleWorkspaceController extends Controller
                 'google_token_expires_at' => now()->addSeconds((int) ($refreshed['expires_in'] ?? 3600)),
             ])->save();
         }
-        return Http::withToken($token)->get($url, $query)->throw()->json();
+        $response = $method === 'delete'
+            ? Http::withToken($token)->delete($url)
+            : Http::withToken($token)->get($url, $query);
+        return $response->throw()->json();
     }
 }
