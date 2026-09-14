@@ -59,9 +59,10 @@ class GoogleController extends Controller
             ->get('https://gmail.googleapis.com/gmail/v1/users/me/profile');
         if ($profileResponse->failed()) {
             report(new \RuntimeException('Google Gmail profile request failed: ' . $profileResponse->body()));
-            abort(502, 'Google authorization succeeded, but Gmail account details could not be read. Check Gmail API and OAuth scopes.');
+            $profile = [];
+        } else {
+            $profile = $profileResponse->json();
         }
-        $profile = $profileResponse->json();
         $user->forceFill([
             'google_account_email' => $profile['emailAddress'] ?? null,
             'google_access_token' => encrypt($accessToken),
@@ -70,7 +71,7 @@ class GoogleController extends Controller
             'google_connected_at' => now(),
         ])->save();
 
-        return redirect(rtrim(config('app.frontend_url', env('FRONTEND_URL', '/dashboard')), '/') . '/dashboard?google=connected');
+        return redirect(rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/') . '/inbox?google=connected');
     }
 
     public function status(Request $request)
