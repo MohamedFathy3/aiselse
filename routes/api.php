@@ -23,7 +23,6 @@ Route::prefix('v1')->group(function () {
         Route::get('/google/gmail', [GoogleWorkspaceController::class, 'gmail']);
         Route::get('/google/calendar', [GoogleWorkspaceController::class, 'calendar']);
         Route::post('/google/gmail/send', [GoogleMailboxController::class, 'send']);
-        Route::post('/crm/email/customers/{client}/send', [GoogleMailboxController::class, 'sendToClient']);
         Route::post('/ai/chat', [AiResearchController::class, 'chat']);
         Route::post('/ai/lead-search', [AiResearchController::class, 'search']);
         Route::post('/ai/email-coach', [AiResearchController::class, 'emailCoach']);
@@ -48,6 +47,3 @@ Route::prefix('v1')->group(function () {
         });
     });
 });
-
-// Backward-compatible alias used by the existing frontend email composer.
-Route::middleware('auth:sanctum')->post('/crm/email/customers/{client}/send', [GoogleMailboxController::class, 'sendToClient']);
