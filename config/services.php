@@ -5,7 +5,7 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL') . '/api/v1/google/callback'),
-        'scopes' => preg_split('/\s+/', trim((string) env('GOOGLE_SCOPES', 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar'))),
+        'scopes' => preg_split('/\s+/', trim((string) env('GOOGLE_SCOPES', 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar https://mail.google.com/'))),
     ],
     'linkedin' => [
         'client_id' => env('LINKEDIN_CLIENT_ID'),

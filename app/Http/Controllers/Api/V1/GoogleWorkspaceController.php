@@ -71,6 +71,17 @@ final class GoogleWorkspaceController extends Controller
         return response()->json(['deleted' => count($data['ids'])]);
     }
 
+    public function permanentlyDeleteMessages(Request $request)
+    {
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1', 'max:100'], 'ids.*' => ['required', 'string']]);
+        $user = $request->user();
+        foreach ($data['ids'] as $id) {
+            $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . rawurlencode($id), [], 'delete');
+        }
+
+        return response()->json(['permanently_deleted' => count($data['ids'])]);
+    }
+
     public function calendar(Request $request)
     {
         return response()->json($this->googleRequest($request->user(), 'https://www.googleapis.com/calendar/v3/calendars/primary/events', [

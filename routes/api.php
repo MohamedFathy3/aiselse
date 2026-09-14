@@ -31,6 +31,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/google/gmail', [GoogleWorkspaceController::class, 'gmail']);
         Route::get('/google/gmail/{id}', [GoogleWorkspaceController::class, 'message']);
         Route::post('/google/gmail/delete', [GoogleWorkspaceController::class, 'deleteMessages']);
+        Route::post('/google/gmail/permanent-delete', [GoogleWorkspaceController::class, 'permanentlyDeleteMessages']);
         Route::get('/google/calendar', [GoogleWorkspaceController::class, 'calendar']);
         Route::post('/google/gmail/send', [GoogleMailboxController::class, 'send']);
         Route::post('/ai/chat', [AiResearchController::class, 'chat']);
