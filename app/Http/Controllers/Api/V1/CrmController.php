@@ -88,6 +88,11 @@ class CrmController extends Controller
         return $lead->fresh('assignedTo:id,name');
     }
 
+    public function destroyLead(Request $request, Lead $lead)
+    {
+        $this->authorize('delete', $lead); $lead->delete(); return response()->noContent();
+    }
+
     public function convertLead(Request $request, Lead $lead)
     {
         $this->authorize('convert', $lead);
@@ -114,6 +119,20 @@ class CrmController extends Controller
         return response()->json(Client::create($data), 201);
     }
 
+    public function updateClient(Request $request, Client $client)
+    {
+        $this->authorize('update', $client);
+        $data = $request->validate(['company_name' => ['sometimes', 'string', 'max:255'], 'website' => ['nullable', 'url'], 'country' => ['nullable', 'string'], 'city' => ['nullable', 'string'], 'address' => ['nullable', 'string'], 'industry' => ['nullable', 'string'], 'description' => ['nullable', 'string'], 'status' => ['nullable', 'in:active,inactive,on_hold']]);
+        if (isset($data['company_name'])) $data['normalized_company_name'] = Str::lower(trim($data['company_name']));
+        if (array_key_exists('website', $data)) $data['company_domain'] = $this->domain($data['website']);
+        $client->update($data); return response()->json($client);
+    }
+
+    public function destroyClient(Request $request, Client $client)
+    {
+        $this->authorize('update', $client); $client->delete(); return response()->noContent();
+    }
+
     public function contacts(Request $request)
     {
         return Contact::query()->when($request->user()->isSales(), function ($q) use ($request) { $q->where(function ($q) use ($request) { $q->where('contactable_type', 'client')->whereIn('contactable_id', Client::where('user_id', $request->user()->id)->select('id'))->orWhere('contactable_type', 'lead')->whereIn('contactable_id', Lead::where('assigned_to', $request->user()->id)->select('id')); }); })->latest()->paginate(50);
@@ -125,12 +144,22 @@ class CrmController extends Controller
         return response()->json(Contact::create($data), 201);
     }
 
-    public function agents(Request $request) { return Agent::query()->latest()->paginate(50); }
-    public function storeAgent(Request $request) { return response()->json(Agent::create($request->validate(['company_name' => ['required', 'string', 'max:255'], 'country' => ['nullable', 'string'], 'city' => ['nullable', 'string'], 'website' => ['nullable', 'url'], 'contact_person' => ['nullable', 'string'], 'email' => ['nullable', 'email'], 'phone' => ['nullable', 'string'], 'notes' => ['nullable', 'string']])), 201); }
+    public function agents(Request $request) { $query = Agent::query()->latest(); if ($request->user()->isSales()) $query->where('user_id', $request->user()->id); return $query->paginate(50); }
+    public function storeAgent(Request $request) { $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'country' => ['nullable', 'string'], 'city' => ['nullable', 'string'], 'address' => ['nullable', 'string'], 'website' => ['nullable', 'url'], 'contact_person' => ['nullable', 'string'], 'email' => ['nullable', 'email'], 'phone' => ['nullable', 'string'], 'services' => ['nullable', 'array'], 'notes' => ['nullable', 'string']]); $data['user_id'] = $request->user()->id; return response()->json(Agent::create($data), 201); }
+    public function updateAgent(Request $request, Agent $agent) { $this->canEdit($request, $agent->user_id); $data = $request->validate(['company_name' => ['sometimes', 'string', 'max:255'], 'country' => ['nullable', 'string'], 'city' => ['nullable', 'string'], 'address' => ['nullable', 'string'], 'website' => ['nullable', 'url'], 'contact_person' => ['nullable', 'string'], 'email' => ['nullable', 'email'], 'phone' => ['nullable', 'string'], 'services' => ['nullable', 'array'], 'notes' => ['nullable', 'string'], 'status' => ['nullable', 'in:active,inactive']]); $agent->update($data); return response()->json($agent); }
+    public function destroyAgent(Request $request, Agent $agent) { $this->canEdit($request, $agent->user_id); $agent->delete(); return response()->noContent(); }
     public function shipments(Request $request) { $q = Shipment::query()->with(['client:id,company_name', 'agent:id,company_name'])->latest(); if ($request->user()->isSales()) $q->where('salesman_id', $request->user()->id); return $q->paginate(50); }
-    public function storeShipment(Request $request) { $data = $request->validate(['client_id' => ['required', 'exists:clients,id'], 'agent_id' => ['nullable', 'exists:agents,id'], 'direction' => ['required', 'in:import,export,domestic,cross_booking'], 'transport_type' => ['required', 'in:ocean,air,inland,customs_clearance'], 'shipment_type' => ['required', 'in:fcl,lcl,bulk,flexi,tank'], 'open_date' => ['required', 'date'], 'branch' => ['nullable', 'string'], 'notes' => ['nullable', 'string'], 'warehousing' => ['boolean'], 'dangerous_goods' => ['boolean'], 'sales_lead_flag' => ['boolean']]); $data['salesman_id'] = $request->user()->id; $data['reference_number'] = 'PYR-' . now()->format('Y') . '-' . strtoupper(Str::random(6)); return response()->json(Shipment::create($data)->load(['client:id,company_name', 'agent:id,company_name']), 201); }
+    public function storeShipment(Request $request) { $data = $request->validate(['client_id' => ['required', 'exists:clients,id'], 'agent_id' => ['nullable', 'exists:agents,id'], 'direction' => ['required', 'in:import,export,domestic,cross_booking'], 'transport_type' => ['required', 'in:ocean,air,inland,customs_clearance'], 'shipment_type' => ['required', 'in:fcl,lcl,bulk,flexi,tank'], 'open_date' => ['required', 'date'], 'branch' => ['nullable', 'string'], 'notes' => ['nullable', 'string'], 'warehousing' => ['boolean'], 'dangerous_goods' => ['boolean'], 'sales_lead_flag' => ['boolean']]); $this->canUseClient($request, (int) $data['client_id']); if (!empty($data['agent_id'])) $this->canUseAgent($request, (int) $data['agent_id']); $data['salesman_id'] = $request->user()->id; $data['reference_number'] = 'PYR-' . now()->format('Y') . '-' . strtoupper(Str::random(6)); return response()->json(Shipment::create($data)->load(['client:id,company_name', 'agent:id,company_name']), 201); }
+    public function updateShipment(Request $request, Shipment $shipment) { $this->canEdit($request, $shipment->salesman_id); $data = $request->validate(['client_id' => ['sometimes', 'exists:clients,id'], 'agent_id' => ['nullable', 'exists:agents,id'], 'direction' => ['sometimes', 'in:import,export,domestic,cross_booking'], 'transport_type' => ['sometimes', 'in:ocean,air,inland,customs_clearance'], 'shipment_type' => ['sometimes', 'in:fcl,lcl,bulk,flexi,tank'], 'open_date' => ['sometimes', 'date'], 'status' => ['nullable', 'in:open,handed_over,cancelled'], 'branch' => ['nullable', 'string'], 'notes' => ['nullable', 'string'], 'warehousing' => ['boolean'], 'dangerous_goods' => ['boolean'], 'sales_lead_flag' => ['boolean']]); if (isset($data['client_id'])) $this->canUseClient($request, (int) $data['client_id']); if (!empty($data['agent_id'])) $this->canUseAgent($request, (int) $data['agent_id']); $shipment->update($data); return response()->json($shipment->load(['client:id,company_name', 'agent:id,company_name'])); }
+    public function destroyShipment(Request $request, Shipment $shipment) { $this->canEdit($request, $shipment->salesman_id); $shipment->delete(); return response()->noContent(); }
     public function followUps(Request $request) { $q = FollowUp::query()->with('assignedTo:id,name')->latest('due_date'); if ($request->user()->isSales()) $q->where('assigned_to', $request->user()->id); return $q->paginate(50); }
     public function storeFollowUp(Request $request) { $data = $request->validate(['subject_type' => ['required', 'in:lead,client'], 'subject_id' => ['required', 'integer'], 'contact_id' => ['nullable', 'exists:contacts,id'], 'type' => ['required', 'in:call,email,meeting,whatsapp,general'], 'due_date' => ['required', 'date'], 'due_time' => ['nullable'], 'note' => ['nullable', 'string']]); $data['assigned_to'] = $request->user()->id; return response()->json(FollowUp::create($data), 201); }
+    public function updateFollowUp(Request $request, FollowUp $followUp) { $this->canEdit($request, $followUp->assigned_to); $data = $request->validate(['type' => ['sometimes', 'in:call,email,meeting,whatsapp,general'], 'due_date' => ['sometimes', 'date'], 'due_time' => ['nullable'], 'note' => ['nullable', 'string'], 'status' => ['nullable', 'in:pending,completed,cancelled,overdue']]); $followUp->update($data); return response()->json($followUp); }
+    public function destroyFollowUp(Request $request, FollowUp $followUp) { $this->canEdit($request, $followUp->assigned_to); $followUp->delete(); return response()->noContent(); }
+
+    private function canEdit(Request $request, ?int $ownerId): void { abort_unless($request->user()->isAdmin() || $ownerId === $request->user()->id, 403, 'You cannot edit this record.'); }
+    private function canUseClient(Request $request, int $clientId): void { abort_unless($request->user()->isAdmin() || Client::whereKey($clientId)->where('user_id', $request->user()->id)->exists(), 403, 'You cannot use this client.'); }
+    private function canUseAgent(Request $request, int $agentId): void { abort_unless($request->user()->isAdmin() || Agent::whereKey($agentId)->where('user_id', $request->user()->id)->exists(), 403, 'You cannot use this agent.'); }
 
     public function search(Request $request)
     {

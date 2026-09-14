@@ -43,17 +43,26 @@ Route::prefix('v1')->group(function () {
         Route::get('/leads', [CrmController::class, 'leads']);
         Route::post('/leads', [CrmController::class, 'storeLead']);
         Route::patch('/leads/{lead}', [CrmController::class, 'updateLead']);
+        Route::delete('/leads/{lead}', [CrmController::class, 'destroyLead']);
         Route::post('/leads/{lead}/convert', [CrmController::class, 'convertLead']);
         Route::get('/clients', [CrmController::class, 'clients']);
         Route::post('/clients', [CrmController::class, 'storeClient']);
+        Route::patch('/clients/{client}', [CrmController::class, 'updateClient']);
+        Route::delete('/clients/{client}', [CrmController::class, 'destroyClient']);
         Route::get('/contacts', [CrmController::class, 'contacts']);
         Route::post('/contacts', [CrmController::class, 'storeContact']);
         Route::get('/agents', [CrmController::class, 'agents']);
         Route::post('/agents', [CrmController::class, 'storeAgent']);
+        Route::patch('/agents/{agent}', [CrmController::class, 'updateAgent']);
+        Route::delete('/agents/{agent}', [CrmController::class, 'destroyAgent']);
         Route::get('/shipments', [CrmController::class, 'shipments']);
         Route::post('/shipments', [CrmController::class, 'storeShipment']);
+        Route::patch('/shipments/{shipment}', [CrmController::class, 'updateShipment']);
+        Route::delete('/shipments/{shipment}', [CrmController::class, 'destroyShipment']);
         Route::get('/follow-ups', [CrmController::class, 'followUps']);
         Route::post('/follow-ups', [CrmController::class, 'storeFollowUp']);
+        Route::patch('/follow-ups/{followUp}', [CrmController::class, 'updateFollowUp']);
+        Route::delete('/follow-ups/{followUp}', [CrmController::class, 'destroyFollowUp']);
         Route::post('/lead-searches', [AiResearchController::class, 'search']);
         Route::middleware('role:admin')->prefix('admin')->group(function () {
             Route::apiResource('users', UserController::class)->except(['show']);

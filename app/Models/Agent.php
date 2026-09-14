@@ -16,7 +16,7 @@ class Agent extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'company_name', 'country', 'city', 'address', 'website',
+        'user_id', 'company_name', 'country', 'city', 'address', 'website',
         'contact_person', 'email', 'phone', 'services', 'notes', 'status',
     ];
 
