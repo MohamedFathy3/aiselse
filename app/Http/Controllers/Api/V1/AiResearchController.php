@@ -47,8 +47,11 @@ final class AiResearchController extends Controller
         $data = $request->validate(['message' => ['required', 'string', 'min:2', 'max:4000']]);
         $context = $this->crmContext($request);
         $web = $this->webSearch($data['message']);
+        $directPages = $this->directPages($data['message']);
+        $web['results'] = array_merge($directPages, $web['results']);
+        $web['sources'] = collect($web['results'])->map(fn ($item) => ['title' => $item['title'], 'url' => $item['url']])->unique('url')->values()->all();
         try {
-            $result = $this->gemini('You are a general-purpose web research and sales assistant. Answer in the same language as the user. Use the web results below for current public facts, cite the source URLs inline when useful, and clearly say when a fact cannot be verified. CRM data is private supplementary context only; never limit your answer to CRM and never claim CRM data is the only available source. Be practical and concise. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nWEB RESULTS: " . json_encode($web['results'], JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), false);
+            $result = $this->gemini('You are a general-purpose web research and sales assistant. Answer in the same language as the user. If a DIRECT PAGE was supplied below, treat its extracted text as the primary source and do not invent a description from the domain name. Clearly distinguish verified page content from inference, and say when the page could not be verified. Use web results for current public facts and cite source URLs inline when useful. CRM data is private supplementary context only; never limit your answer to CRM. Be practical and concise. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nDIRECT PAGE CONTENT: " . json_encode($directPages, JSON_UNESCAPED_UNICODE) . "\nWEB RESULTS: " . json_encode($web['results'], JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), false);
             return response()->json(['answer' => $result['text'], 'sources' => $web['sources']]);
         } catch (\Throwable $e) {
             report($e);
@@ -113,6 +116,23 @@ final class AiResearchController extends Controller
     private function researchPrompt(string $query): string
     {
         return 'Search the public web for real companies matching this request. Answer in Arabic if the request is Arabic. Return a useful list with company name, country/city, software or business focus, why it may need freight forwarding, and a source URL for every company. Clearly separate verified facts from inference. Request: ' . $query;
+    }
+
+    private function directPages(string $message): array
+    {
+        preg_match_all('/https?:\/\/[^\s<>{}\[\]"\']+/i', $message, $matches);
+        return collect($matches[0] ?? [])->map(function (string $url) {
+            $url = rtrim($url, '.,!?،؛)');
+            $host = parse_url($url, PHP_URL_HOST);
+            if (!$host || !in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true) || in_array(strtolower($host), ['localhost', '127.0.0.1'], true)) return null;
+            try {
+                $response = Http::timeout(config('services.scraper.timeout', 10))->connectTimeout(5)->withHeaders(['User-Agent' => 'PyramidthResearchBot/1.0 (+public-web-research)'])->get($url);
+                if (!$response->successful()) return ['title' => 'Page unavailable', 'url' => $url, 'snippet' => 'The page returned HTTP ' . $response->status() . '.'];
+                $html = preg_replace('/<(script|style|noscript)[^>]*>.*?<\/\1>/is', ' ', $response->body());
+                preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $title);
+                return ['title' => trim(strip_tags($title[1] ?? $host)), 'url' => $url, 'snippet' => \Illuminate\Support\Str::limit(trim(preg_replace('/\s+/u', ' ', strip_tags($html))), 10000, '...')];
+            } catch (\Throwable $e) { report($e); return ['title' => 'Page fetch failed', 'url' => $url, 'snippet' => 'The page could not be fetched safely from the server.']; }
+        })->filter()->values()->all();
     }
 
     private function providerFailure(\Throwable $e): array
