@@ -55,12 +55,15 @@ class GoogleController extends Controller
         $user = \App\Models\User::findOrFail($payload['user_id']);
         $accessToken = $token['access_token'];
         $profileResponse = Http::acceptJson()
-            ->withToken($accessToken)
-            ->get('https://www.googleapis.com/oauth2/v2/userinfo');
-        abort_if($profileResponse->failed(), 502, 'Google profile request failed: ' . $profileResponse->body());
+            ->withHeaders(['Authorization' => 'Bearer ' . $accessToken])
+            ->get('https://gmail.googleapis.com/gmail/v1/users/me/profile');
+        if ($profileResponse->failed()) {
+            report(new \RuntimeException('Google Gmail profile request failed: ' . $profileResponse->body()));
+            abort(502, 'Google authorization succeeded, but Gmail account details could not be read. Check Gmail API and OAuth scopes.');
+        }
         $profile = $profileResponse->json();
         $user->forceFill([
-            'google_account_email' => $profile['email'] ?? null,
+            'google_account_email' => $profile['emailAddress'] ?? null,
             'google_access_token' => encrypt($accessToken),
             'google_refresh_token' => isset($token['refresh_token']) ? encrypt($token['refresh_token']) : $user->google_refresh_token,
             'google_token_expires_at' => now()->addSeconds((int) ($token['expires_in'] ?? 3600)),
