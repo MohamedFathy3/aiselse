@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\Client;
+use App\Models\Contact;
+use App\Services\GmailService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -95,7 +97,7 @@ final class GoogleWorkspaceController extends Controller
         ]));
     }
 
-    public function createCalendarEvent(Request $request)
+    public function createCalendarEvent(Request $request, GmailService $gmail)
     {
         $data = $request->validate([
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
@@ -105,6 +107,10 @@ final class GoogleWorkspaceController extends Controller
             'ends_at' => ['required', 'date', 'after:starts_at'],
             'attendees' => ['nullable', 'array', 'max:20'],
             'attendees.*' => ['email'],
+            'send_email' => ['boolean'],
+            'email_to' => ['nullable', 'email'],
+            'email_subject' => ['nullable', 'string', 'max:255'],
+            'email_body' => ['nullable', 'string', 'max:10000'],
         ]);
 
         $user = $request->user();
@@ -135,7 +141,17 @@ final class GoogleWorkspaceController extends Controller
             'status' => 'confirmed',
         ]);
 
-        return response()->json(['event' => $event, 'local_event' => $local], 201);
+        $emailSent = false;
+        if ($request->boolean('send_email')) {
+            $recipient = $data['email_to'] ?? null;
+            if (!$recipient && !empty($data['client_id'])) {
+                $recipient = Contact::where('contactable_type', 'client')->where('contactable_id', $data['client_id'])->whereNotNull('email')->orderByDesc('is_primary')->value('email');
+            }
+            $recipient ??= $user->email;
+            $gmail->send($user, $recipient, $data['email_subject'] ?? $data['title'], $data['email_body'] ?? ($data['description'] ?? 'Appointment scheduled for ' . $start->toDateTimeString()));
+            $emailSent = true;
+        }
+        return response()->json(['event' => $event, 'local_event' => $local, 'email_sent' => $emailSent], 201);
     }
 
     private function normalizeMessage(array $message): array
