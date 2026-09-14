@@ -23,6 +23,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/google/connect', [GoogleController::class, 'connect']);
         Route::get('/linkedin/connect', [LinkedInController::class, 'connect']);
         Route::get('/linkedin/profile', [LinkedInController::class, 'profile']);
+        Route::get('/linkedin/status', [LinkedInController::class, 'status']);
         Route::delete('/linkedin/disconnect', [LinkedInController::class, 'disconnect']);
         Route::post('/web-research/scrape', [WebResearchController::class, 'scrape']);
         Route::get('/google/status', [GoogleController::class, 'status']);

@@ -35,6 +35,11 @@ final class LinkedInController extends Controller
         return response()->json(Http::withToken($request->user()->linkedin_access_token)->timeout(15)->get('https://api.linkedin.com/v2/userinfo')->throw()->json());
     }
 
+    public function status(Request $request)
+    {
+        return response()->json(['connected' => filled($request->user()->linkedin_access_token), 'connected_at' => optional($request->user()->linkedin_connected_at)?->toIso8601String()]);
+    }
+
     public function disconnect(Request $request)
     {
         $request->user()->forceFill(['linkedin_access_token' => null, 'linkedin_sub' => null, 'linkedin_connected_at' => null])->save();
