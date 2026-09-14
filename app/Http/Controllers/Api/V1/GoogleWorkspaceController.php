@@ -63,7 +63,10 @@ final class GoogleWorkspaceController extends Controller
         $data = $request->validate(['ids' => ['required', 'array', 'min:1', 'max:100'], 'ids.*' => ['required', 'string']]);
         $user = $request->user();
         foreach ($data['ids'] as $id) {
-            $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . rawurlencode($id), [], 'delete');
+            // Move to Trash instead of permanently deleting. messages.delete
+            // requires the broader https://mail.google.com/ scope, while
+            // messages.trash is supported by the already-requested gmail.modify.
+            $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . rawurlencode($id) . '/trash', [], 'post');
         }
         return response()->json(['deleted' => count($data['ids'])]);
     }
@@ -126,9 +129,11 @@ final class GoogleWorkspaceController extends Controller
                 'google_token_expires_at' => now()->addSeconds((int) ($refreshed['expires_in'] ?? 3600)),
             ])->save();
         }
-        $response = $method === 'delete'
-            ? Http::withToken($token)->delete($url)
-            : Http::withToken($token)->get($url, $query);
+        $response = match ($method) {
+            'delete' => Http::withToken($token)->delete($url),
+            'post' => Http::withToken($token)->post($url, $query),
+            default => Http::withToken($token)->get($url, $query),
+        };
         return $response->throw()->json();
     }
 }
