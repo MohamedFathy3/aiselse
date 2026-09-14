@@ -13,10 +13,14 @@ final class GoogleWorkspaceController extends Controller
         $user = $request->user();
         $query = $request->string('q', 'newer_than:30d')->toString();
         $limit = min(max($request->integer('limit', 25), 1), 50);
-        $list = $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages', [
+        $queryParams = [
             'maxResults' => $limit,
             'q' => $query,
-        ]);
+        ];
+        if ($request->filled('pageToken')) {
+            $queryParams['pageToken'] = $request->string('pageToken')->toString();
+        }
+        $list = $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages', $queryParams);
 
         $messages = collect($list['messages'] ?? [])->map(function (array $message) use ($user) {
             $detail = $this->googleRequest($user, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . $message['id'], [
