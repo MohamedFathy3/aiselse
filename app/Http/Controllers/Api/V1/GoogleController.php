@@ -40,17 +40,25 @@ class GoogleController extends Controller
         $payload = json_decode(Crypt::decryptString($request->string('state')->toString()), true, 512, JSON_THROW_ON_ERROR);
         abort_if(($payload['expires'] ?? 0) < now()->timestamp, 400, 'Google authorization expired.');
 
-        $token = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+        $tokenResponse = Http::asForm()->post('https://oauth2.googleapis.com/token', [
             'code' => $request->string('code')->toString(),
             'client_id' => config('services.google.client_id'),
             'client_secret' => config('services.google.client_secret'),
             'redirect_uri' => config('services.google.redirect'),
             'grant_type' => 'authorization_code',
-        ])->throw()->json();
+        ]);
+
+        abort_if($tokenResponse->failed(), 502, 'Google token exchange failed: ' . $tokenResponse->body());
+        $token = $tokenResponse->json();
+        abort_unless(filled($token['access_token'] ?? null), 502, 'Google did not return an access token.');
 
         $user = \App\Models\User::findOrFail($payload['user_id']);
         $accessToken = $token['access_token'];
-        $profile = Http::withToken($accessToken)->get('https://www.googleapis.com/oauth2/v2/userinfo')->throw()->json();
+        $profileResponse = Http::acceptJson()
+            ->withToken($accessToken)
+            ->get('https://www.googleapis.com/oauth2/v2/userinfo');
+        abort_if($profileResponse->failed(), 502, 'Google profile request failed: ' . $profileResponse->body());
+        $profile = $profileResponse->json();
         $user->forceFill([
             'google_account_email' => $profile['email'] ?? null,
             'google_access_token' => encrypt($accessToken),
