@@ -29,11 +29,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/google/status', [GoogleController::class, 'status']);
         Route::delete('/google/disconnect', [GoogleController::class, 'disconnect']);
         Route::get('/google/gmail', [GoogleWorkspaceController::class, 'gmail']);
+        Route::get('/google/gmail/{id}', [GoogleWorkspaceController::class, 'message']);
         Route::get('/google/calendar', [GoogleWorkspaceController::class, 'calendar']);
         Route::post('/google/gmail/send', [GoogleMailboxController::class, 'send']);
         Route::post('/ai/chat', [AiResearchController::class, 'chat']);
         Route::post('/ai/lead-search', [AiResearchController::class, 'search']);
         Route::post('/ai/email-coach', [AiResearchController::class, 'emailCoach']);
+        Route::post('/ai/email-draft', [AiResearchController::class, 'emailDraft']);
         Route::get('/dashboard', [CrmController::class, 'dashboard']);
         Route::get('/leads', [CrmController::class, 'leads']);
         Route::post('/leads', [CrmController::class, 'storeLead']);

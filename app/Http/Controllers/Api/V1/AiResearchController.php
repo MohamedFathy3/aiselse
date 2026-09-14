@@ -73,6 +73,23 @@ final class AiResearchController extends Controller
         }
     }
 
+    public function emailDraft(Request $request)
+    {
+        $data = $request->validate([
+            'email' => ['required', 'string', 'min:10', 'max:20000'],
+            'tone' => ['nullable', 'string', 'in:professional,friendly,concise,persuasive'],
+            'goal' => ['nullable', 'string', 'max:500'],
+        ]);
+        try {
+            $result = $this->gemini('Write only a ready-to-review email reply in the same language as the email below. Do not add a subject, analysis, greeting explanation, markdown, or labels. Be accurate and never invent facts. Tone: ' . ($data['tone'] ?? 'professional') . '. Goal: ' . ($data['goal'] ?? 'answer helpfully and move the conversation forward') . "\nEMAIL:\n" . $data['email'], false);
+            return response()->json(['draft' => trim($result['text']), 'sources' => []]);
+        } catch (\Throwable $e) {
+            report($e);
+            $failure = $this->providerFailure($e);
+            return response()->json(['error_code' => $failure['code'], 'message' => $failure['message'], 'provider_status' => $failure['status']], $failure['http_status']);
+        }
+    }
+
     private function gemini(string $prompt, bool $search): array
     {
         $key = config('services.ai.key');
