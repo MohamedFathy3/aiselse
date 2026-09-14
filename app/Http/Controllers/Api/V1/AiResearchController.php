@@ -46,9 +46,10 @@ final class AiResearchController extends Controller
     {
         $data = $request->validate(['message' => ['required', 'string', 'min:2', 'max:4000']]);
         $context = $this->crmContext($request);
+        $web = $this->webSearch($data['message']);
         try {
-            $result = $this->gemini('You are a helpful sales CRM assistant. Answer in Arabic when the user writes Arabic. Use the private CRM context below. Do not use web search in this chat; explain when information is not available in the CRM. Be practical and explain your reasoning. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), false);
-            return response()->json(['answer' => $result['text'], 'sources' => $result['citations']]);
+            $result = $this->gemini('You are a general-purpose web research and sales assistant. Answer in the same language as the user. Use the web results below for current public facts, cite the source URLs inline when useful, and clearly say when a fact cannot be verified. CRM data is private supplementary context only; never limit your answer to CRM and never claim CRM data is the only available source. Be practical and concise. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nWEB RESULTS: " . json_encode($web['results'], JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), false);
+            return response()->json(['answer' => $result['text'], 'sources' => $web['sources']]);
         } catch (\Throwable $e) {
             report($e);
             $failure = $this->providerFailure($e);
@@ -92,6 +93,21 @@ final class AiResearchController extends Controller
     private function crmContext(Request $request): array
     {
         return ['leads' => Lead::where('assigned_to', $request->user()->id)->latest()->limit(30)->get(['company_name', 'status', 'city', 'industry', 'email']), 'clients' => Client::where('user_id', $request->user()->id)->latest()->limit(30)->get(['company_name', 'country', 'city', 'industry'])];
+    }
+
+    private function webSearch(string $query): array
+    {
+        $key = config('services.search.key');
+        $engine = config('services.search.engine_id');
+        if (!$key || !$engine) return ['results' => [], 'sources' => []];
+        try {
+            $items = Http::timeout(10)->connectTimeout(5)->get('https://www.googleapis.com/customsearch/v1', ['key' => $key, 'cx' => $engine, 'q' => trim($query), 'num' => 8])->throw()->json('items', []);
+            $results = collect($items)->map(fn ($item) => ['title' => $item['title'] ?? '', 'url' => $item['link'] ?? '', 'snippet' => $item['snippet'] ?? ''])->filter(fn ($item) => filled($item['url']))->values()->all();
+            return ['results' => $results, 'sources' => collect($results)->map(fn ($item) => ['title' => $item['title'], 'url' => $item['url']])->all()];
+        } catch (\Throwable $e) {
+            report($e);
+            return ['results' => [], 'sources' => []];
+        }
     }
 
     private function researchPrompt(string $query): string
