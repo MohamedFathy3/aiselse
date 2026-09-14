@@ -29,6 +29,7 @@ class User extends Authenticatable
         // Google tokens must never be serialized to the frontend, under any circumstance.
         'google_access_token',
         'google_refresh_token',
+        'linkedin_access_token',
     ];
 
     protected function casts(): array
@@ -40,6 +41,8 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'google_token_expires_at' => 'datetime',
             'google_connected_at' => 'datetime',
+            'linkedin_access_token' => 'encrypted',
+            'linkedin_connected_at' => 'datetime',
         ];
     }
 

@@ -7,10 +7,13 @@ use App\Http\Controllers\Api\V1\GoogleController;
 use App\Http\Controllers\Api\V1\GoogleMailboxController;
 use App\Http\Controllers\Api\V1\GoogleWorkspaceController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\LinkedInController;
+use App\Http\Controllers\Api\V1\WebResearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::get('/google/callback', [GoogleController::class, 'callback']);
+    Route::get('/linkedin/callback', [LinkedInController::class, 'callback']);
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
@@ -18,6 +21,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::get('/google/connect', [GoogleController::class, 'connect']);
+        Route::get('/linkedin/connect', [LinkedInController::class, 'connect']);
+        Route::get('/linkedin/profile', [LinkedInController::class, 'profile']);
+        Route::delete('/linkedin/disconnect', [LinkedInController::class, 'disconnect']);
+        Route::post('/web-research/scrape', [WebResearchController::class, 'scrape']);
         Route::get('/google/status', [GoogleController::class, 'status']);
         Route::delete('/google/disconnect', [GoogleController::class, 'disconnect']);
         Route::get('/google/gmail', [GoogleWorkspaceController::class, 'gmail']);
