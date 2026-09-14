@@ -47,7 +47,7 @@ final class AiResearchController extends Controller
         $data = $request->validate(['message' => ['required', 'string', 'min:2', 'max:4000']]);
         $context = $this->crmContext($request);
         try {
-            $result = $this->gemini('You are a helpful sales CRM assistant. Answer in Arabic when the user writes Arabic. Use the private CRM context below, but if the user asks about companies, people, markets or facts outside the CRM, use Google Search and cite sources. Be practical and explain your reasoning. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), true);
+            $result = $this->gemini('You are a helpful sales CRM assistant. Answer in Arabic when the user writes Arabic. Use the private CRM context below. Do not use web search in this chat; explain when information is not available in the CRM. Be practical and explain your reasoning. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), false);
             return response()->json(['answer' => $result['text'], 'sources' => $result['citations']]);
         } catch (\Throwable $e) {
             report($e);
