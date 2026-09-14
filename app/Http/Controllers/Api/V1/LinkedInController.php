@@ -26,7 +26,7 @@ final class LinkedInController extends Controller
         $user = $request->user();
         abort_unless($user, 401, 'Login is required before connecting LinkedIn.');
         $user->forceFill(['linkedin_access_token' => $token['access_token'], 'linkedin_sub' => $profile['sub'] ?? null, 'linkedin_connected_at' => now()])->save();
-        return redirect(rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:3000')), '/') . '/settings?linkedin=connected');
+        return redirect(rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/') . '/linkedin?linkedin=connected');
     }
 
     public function profile(Request $request)
