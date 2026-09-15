@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('crm:send-due-follow-up-emails')
     ->everyMinute()
     ->withoutOverlapping();
+Schedule::command('crm:send-scheduled-emails')
+    ->everyMinute()
+    ->withoutOverlapping();
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());

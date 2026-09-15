@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\LinkedInController;
 use App\Http\Controllers\Api\V1\WebResearchController;
 use App\Http\Controllers\Api\V1\LocationController;
+use App\Http\Controllers\Api\V1\ScheduledEmailController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -36,6 +37,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/google/calendar', [GoogleWorkspaceController::class, 'calendar']);
         Route::post('/google/calendar', [GoogleWorkspaceController::class, 'createCalendarEvent']);
         Route::post('/google/gmail/send', [GoogleMailboxController::class, 'send']);
+        Route::get('/scheduled-emails', [ScheduledEmailController::class, 'index']);
+        Route::post('/scheduled-emails', [ScheduledEmailController::class, 'store']);
+        Route::delete('/scheduled-emails/{scheduledEmail}', [ScheduledEmailController::class, 'destroy']);
         Route::post('/ai/chat', [AiResearchController::class, 'chat']);
         Route::post('/ai/lead-search', [AiResearchController::class, 'search']);
         Route::post('/ai/email-coach', [AiResearchController::class, 'emailCoach']);

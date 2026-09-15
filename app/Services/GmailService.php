@@ -6,10 +6,11 @@ use Illuminate\Support\Facades\Http;
 
 class GmailService
 {
-    public function send(User $user, string $to, string $subject, string $body): array
+    public function send(User $user, string $to, string $subject, string $body, array $cc = []): array
     {
         $token = $this->token($user);
-        $raw = base64_encode("To: {$to}\r\nSubject: {$subject}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{$body}");
+        $ccHeader = $cc ? "Cc: " . implode(', ', $cc) . "\r\n" : '';
+        $raw = base64_encode("To: {$to}\r\n{$ccHeader}Subject: {$subject}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{$body}");
         return Http::withToken($token)->post('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', ['raw' => rtrim(strtr($raw, '+/', '-_'), '=')])->throw()->json();
     }
 
