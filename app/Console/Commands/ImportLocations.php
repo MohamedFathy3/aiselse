@@ -9,6 +9,8 @@ class ImportLocations extends Command {
     protected $signature = 'locations:import {--refresh : Replace existing location rows}';
     protected $description = 'Import countries and cities from the Countries States Cities Database';
     public function handle(): int {
+        // The upstream city export is large; importing it requires more than Laravel's common 128M CLI limit.
+        if (function_exists('ini_set')) ini_set('memory_limit', '1024M');
         $base = 'https://github.com/dr5hn/countries-states-cities-database/releases/latest/download/';
         $dir = storage_path('app/location-import'); if (!is_dir($dir)) mkdir($dir, 0755, true);
         $countryFile = $dir . '/countries.json'; $cityFile = $dir . '/cities.json.gz';
