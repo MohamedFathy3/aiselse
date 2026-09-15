@@ -44,14 +44,28 @@ final class AiResearchController extends Controller
 
     public function chat(Request $request)
     {
-        $data = $request->validate(['message' => ['required', 'string', 'min:2', 'max:4000']]);
+        $data = $request->validate([
+            'message' => ['required', 'string', 'min:2', 'max:4000'],
+            'history' => ['nullable', 'array', 'max:20'],
+            'history.*.role' => ['required', 'in:user,assistant'],
+            'history.*.text' => ['required', 'string', 'max:12000'],
+            'history.*.sources' => ['nullable', 'array', 'max:10'],
+            'history.*.sources.*.title' => ['nullable', 'string', 'max:500'],
+            'history.*.sources.*.url' => ['nullable', 'url', 'max:2000'],
+        ]);
         $context = $this->crmContext($request);
         $web = $this->webSearch($data['message']);
         $directPages = $this->directPages($data['message']);
         $web['results'] = array_merge($directPages, $web['results']);
         $web['sources'] = collect($web['results'])->map(fn ($item) => ['title' => $item['title'], 'url' => $item['url']])->unique('url')->values()->all();
         try {
-            $result = $this->gemini('You are a general-purpose web research and sales assistant. Answer in the same language as the user. If a DIRECT PAGE was supplied below, treat its extracted text as the primary source and do not invent a description from the domain name. Clearly distinguish verified page content from inference, and say when the page could not be verified. Use web results for current public facts and cite source URLs inline when useful. CRM data is private supplementary context only; never limit your answer to CRM. Be practical and concise. CRM context: ' . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nDIRECT PAGE CONTENT: " . json_encode($directPages, JSON_UNESCAPED_UNICODE) . "\nWEB RESULTS: " . json_encode($web['results'], JSON_UNESCAPED_UNICODE) . "\nUser question: " . trim($data['message']), false);
+            $history = collect($data['history'] ?? [])->take(-20)->map(fn (array $item) => [
+                'role' => $item['role'],
+                'text' => $item['text'],
+                'sources' => $item['sources'] ?? [],
+            ])->values()->all();
+            $prompt = 'You are a grounded CRM research assistant. Answer in the same language as the user. Maintain the conversation context below and resolve follow-up questions using it. If the user asks where a previous answer came from, inspect the previous assistant message and its attached sources; never claim a source, CRM record, website, or verification that is not present in the context. If the source is missing or uncertain, say clearly that you cannot verify it and ask for the URL or explain what was actually searched. Never invent company names, page contents, memberships, certifications, or citations. Use only evidence from DIRECT PAGE CONTENT, WEB RESULTS, CRM context, and conversation history. Treat direct page content as primary evidence. Clearly separate verified facts from inference. When citing, use only URLs present in the supplied sources. Be practical and concise.' . "\nCONVERSATION HISTORY: " . json_encode($history, JSON_UNESCAPED_UNICODE) . "\nCRM context: " . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nDIRECT PAGE CONTENT: " . json_encode($directPages, JSON_UNESCAPED_UNICODE) . "\nWEB RESULTS: " . json_encode($web['results'], JSON_UNESCAPED_UNICODE) . "\nCurrent user question: " . trim($data['message']);
+            $result = $this->gemini($prompt, false);
             return response()->json(['answer' => $result['text'], 'sources' => $web['sources']]);
         } catch (\Throwable $e) {
             report($e);
