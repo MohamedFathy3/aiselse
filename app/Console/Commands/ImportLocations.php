@@ -11,12 +11,12 @@ class ImportLocations extends Command {
     public function handle(): int {
         $base = 'https://github.com/dr5hn/countries-states-cities-database/releases/latest/download/';
         $dir = storage_path('app/location-import'); if (!is_dir($dir)) mkdir($dir, 0755, true);
-        $countryFile = $dir . '/countries.json.gz'; $cityFile = $dir . '/cities.json.gz';
+        $countryFile = $dir . '/countries.json'; $cityFile = $dir . '/cities.json.gz';
         $this->info('Downloading country and city data...');
-        Http::timeout(300)->sink($countryFile)->get($base . 'json-countries.json.gz')->throw();
+        Http::timeout(300)->sink($countryFile)->get('https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/json/countries.json')->throw();
         Http::timeout(900)->sink($cityFile)->get($base . 'json-cities.json.gz')->throw();
         if ($this->option('refresh')) { City::query()->delete(); Country::query()->delete(); }
-        $countries = json_decode(gzdecode(file_get_contents($countryFile)), true, 512, JSON_THROW_ON_ERROR);
+        $countries = json_decode(file_get_contents($countryFile), true, 512, JSON_THROW_ON_ERROR);
         $countryMap = [];
         DB::transaction(function () use ($countries, &$countryMap) { foreach ($countries as $item) { $country = Country::updateOrCreate(['source_id' => $item['id']], ['name' => $item['name'], 'iso2' => $item['iso2'], 'iso3' => $item['iso3'] ?? null, 'phonecode' => $item['phonecode'] ?? null]); $countryMap[$item['id']] = $country->id; } });
         unset($countries);
