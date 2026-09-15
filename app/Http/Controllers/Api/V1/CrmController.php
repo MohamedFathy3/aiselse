@@ -166,7 +166,7 @@ class CrmController extends Controller
 
     private function canEdit(Request $request, ?int $ownerId): void { abort_unless($request->user()->isAdmin() || $ownerId === $request->user()->id, 403, 'You cannot edit this record.'); }
     private function canUseClient(Request $request, int $clientId): void { abort_unless($request->user()->isAdmin() || Client::whereKey($clientId)->where('user_id', $request->user()->id)->exists(), 403, 'You cannot use this client.'); }
-    private function canUseSubject(Request $request, string $type, Lead|Client $subject): void { abort_unless($request->user()->isAdmin() || ($type === 'lead' ? $subject->assigned_to === $request->user()->id : $subject->user_id === $request->user()->id), 403, 'You cannot use this record.'); }
+    private function canUseSubject(Request $request, string $type, Lead|Client $subject): void { abort_unless($request->user()->isAdmin() || ($type === 'lead' ? (int) $subject->assigned_to === (int) $request->user()->id : (int) $subject->user_id === (int) $request->user()->id), 403, 'You cannot use this record.'); }
     private function canUseAgent(Request $request, int $agentId): void { abort_unless($request->user()->isAdmin() || Agent::whereKey($agentId)->where('user_id', $request->user()->id)->exists(), 403, 'You cannot use this agent.'); }
 
     public function search(Request $request)
