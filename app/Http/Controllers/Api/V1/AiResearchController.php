@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\AiConversation;
 use App\Models\Lead;
 use App\Models\LeadSearch;
 use App\Models\LeadSearchResult;
@@ -46,6 +47,7 @@ final class AiResearchController extends Controller
     {
         $data = $request->validate([
             'message' => ['required', 'string', 'min:2', 'max:4000'],
+            'conversation_id' => ['nullable', 'integer', 'exists:ai_conversations,id'],
             'history' => ['nullable', 'array', 'max:20'],
             'history.*.role' => ['required', 'in:user,assistant'],
             'history.*.text' => ['required', 'string', 'max:12000'],
@@ -53,6 +55,11 @@ final class AiResearchController extends Controller
             'history.*.sources.*.title' => ['nullable', 'string', 'max:500'],
             'history.*.sources.*.url' => ['nullable', 'url', 'max:2000'],
         ]);
+        $conversation = !empty($data['conversation_id'])
+            ? AiConversation::whereKey($data['conversation_id'])->where('user_id', $request->user()->id)->firstOrFail()
+            : AiConversation::create(['user_id' => $request->user()->id, 'title' => mb_substr(trim($data['message']), 0, 80), 'last_message_at' => now()]);
+        $conversation->messages()->create(['role' => 'user', 'content' => trim($data['message'])]);
+        $conversation->forceFill(['last_message_at' => now()])->save();
         $context = $this->crmContext($request);
         $web = $this->webSearch($data['message']);
         $directPages = $this->directPages($data['message']);
@@ -66,7 +73,14 @@ final class AiResearchController extends Controller
             ])->values()->all();
             $prompt = 'You are a grounded CRM research assistant. Answer in the same language as the user. Maintain the conversation context below and resolve follow-up questions using it. If the user asks where a previous answer came from, inspect the previous assistant message and its attached sources; never claim a source, CRM record, website, or verification that is not present in the context. If the source is missing or uncertain, say clearly that you cannot verify it and ask for the URL or explain what was actually searched. Never invent company names, page contents, memberships, certifications, or citations. Use only evidence from DIRECT PAGE CONTENT, WEB RESULTS, CRM context, and conversation history. Treat direct page content as primary evidence. Clearly separate verified facts from inference. When citing, use only URLs present in the supplied sources. Be practical and concise.' . "\nCONVERSATION HISTORY: " . json_encode($history, JSON_UNESCAPED_UNICODE) . "\nCRM context: " . json_encode($context, JSON_UNESCAPED_UNICODE) . "\nDIRECT PAGE CONTENT: " . json_encode($directPages, JSON_UNESCAPED_UNICODE) . "\nWEB RESULTS: " . json_encode($web['results'], JSON_UNESCAPED_UNICODE) . "\nCurrent user question: " . trim($data['message']);
             $result = $this->gemini($prompt, false);
-            return response()->json(['answer' => $result['text'], 'sources' => $web['sources']]);
+            $conversation->messages()->create([
+                'role' => 'assistant',
+                'content' => $result['text'],
+                'sources' => $web['sources'],
+                'metadata' => ['provider' => config('services.ai.provider'), 'model' => config('services.ai.model')],
+            ]);
+            $conversation->forceFill(['last_message_at' => now()])->save();
+            return response()->json(['conversation_id' => $conversation->id, 'answer' => $result['text'], 'sources' => $web['sources']]);
         } catch (\Throwable $e) {
             report($e);
             $failure = $this->providerFailure($e);

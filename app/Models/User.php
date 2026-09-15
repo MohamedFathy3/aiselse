@@ -97,4 +97,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(LeadSearch::class);
     }
+
+    public function aiConversations(): HasMany
+    {
+        return $this->hasMany(AiConversation::class);
+    }
 }
