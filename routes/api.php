@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\GoogleWorkspaceController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\LinkedInController;
 use App\Http\Controllers\Api\V1\WebResearchController;
+use App\Http\Controllers\Api\V1\LocationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -40,6 +41,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/ai/email-coach', [AiResearchController::class, 'emailCoach']);
         Route::post('/ai/email-draft', [AiResearchController::class, 'emailDraft']);
         Route::get('/dashboard', [CrmController::class, 'dashboard']);
+        Route::get('/locations/countries', [LocationController::class, 'countries']);
+        Route::get('/locations/countries/{country}', [LocationController::class, 'showCountry']);
+        Route::get('/locations/countries/{country}/cities', [LocationController::class, 'cities']);
+        Route::get('/locations/cities/{city}', [LocationController::class, 'showCity']);
         Route::get('/leads', [CrmController::class, 'leads']);
         Route::post('/leads', [CrmController::class, 'storeLead']);
         Route::patch('/leads/{lead}', [CrmController::class, 'updateLead']);
