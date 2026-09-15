@@ -21,6 +21,7 @@ class User extends Authenticatable
         'role',
         'phone',
         'is_active',
+        'timezone',
     ];
 
     protected $hidden = [
@@ -39,6 +40,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_active' => 'boolean',
+            'timezone' => 'string',
             'google_token_expires_at' => 'datetime',
             'google_connected_at' => 'datetime',
             'linkedin_access_token' => 'encrypted',
@@ -59,6 +61,11 @@ class User extends Authenticatable
     public function hasConnectedGoogle(): bool
     {
         return filled($this->google_refresh_token);
+    }
+
+    public function timezone(): string
+    {
+        return $this->timezone ?: (config('app.timezone') ?: 'UTC');
     }
 
     public function leads(): HasMany

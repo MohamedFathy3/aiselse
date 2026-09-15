@@ -14,7 +14,7 @@ class FollowUp extends Model
 
     protected $fillable = [
         'subject_type', 'subject_id', 'contact_id', 'assigned_to',
-        'type', 'due_date', 'due_time', 'note', 'status', 'completed_at',
+        'type', 'due_date', 'due_time', 'timezone', 'note', 'status', 'completed_at',
     ];
 
     protected function casts(): array
@@ -24,6 +24,7 @@ class FollowUp extends Model
             'status' => FollowUpStatus::class,
             'due_date' => 'date',
             'completed_at' => 'datetime',
+            'timezone' => 'string',
         ];
     }
 

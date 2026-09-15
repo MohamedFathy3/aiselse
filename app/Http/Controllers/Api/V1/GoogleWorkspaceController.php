@@ -111,6 +111,7 @@ final class GoogleWorkspaceController extends Controller
             'email_to' => ['nullable', 'email'],
             'email_subject' => ['nullable', 'string', 'max:255'],
             'email_body' => ['nullable', 'string', 'max:10000'],
+            'timezone' => ['nullable', 'timezone'],
         ]);
 
         $user = $request->user();
@@ -118,13 +119,14 @@ final class GoogleWorkspaceController extends Controller
             abort_unless(Client::where('id', $data['client_id'])->where('user_id', $user->id)->exists(), 403, 'You cannot schedule an event for this client.');
         }
 
-        $start = Carbon::parse($data['starts_at']);
-        $end = Carbon::parse($data['ends_at']);
+        $timezone = $data['timezone'] ?? $user->timezone();
+        $start = Carbon::parse($data['starts_at'])->setTimezone($timezone);
+        $end = Carbon::parse($data['ends_at'])->setTimezone($timezone);
         $event = $this->googleRequest($user, 'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all', [
             'summary' => $data['title'],
             'description' => $data['description'] ?? '',
-            'start' => ['dateTime' => $start->toRfc3339String(), 'timeZone' => config('app.timezone')],
-            'end' => ['dateTime' => $end->toRfc3339String(), 'timeZone' => config('app.timezone')],
+            'start' => ['dateTime' => $start->toRfc3339String(), 'timeZone' => $timezone],
+            'end' => ['dateTime' => $end->toRfc3339String(), 'timeZone' => $timezone],
             'attendees' => collect($data['attendees'] ?? [])->map(fn ($email) => ['email' => $email])->values()->all(),
         ], 'post');
 
